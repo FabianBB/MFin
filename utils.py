@@ -1,0 +1,119 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import scipy.stats as stats
+
+def price_contract(r,sigma,T,guarantee, n, initial_price=100):
+    dt = T/n
+    R = np.exp(r*dt)
+    u = np.exp(sigma*np.sqrt(dt))
+    d = 1/u
+    p = (R-d)/(u-d)
+
+    # create matrix to store stock prices
+    stock = np.zeros((n+1,n+1))
+    stock[0,0] = initial_price
+    for i in range(1,n+1):
+        stock[i,0] = stock[i-1,0]*u
+        for j in range(1,i+1):
+            stock[i,j] = stock[i-1,j-1]*d
+
+    # create matrix to store option prices
+    option = np.zeros((n+1,n+1))
+    option[n,:] = np.maximum(guarantee-stock[n,:],0)
+
+    # calculate option prices at each node
+    for i in range(n-1,-1,-1):
+        for j in range(i+1):
+            option[i,j] = np.exp(-r*dt)*(p*option[i+1,j]+(1-p)*option[i+1,j+1])
+
+    return option[0,0]
+
+
+
+
+
+
+# obviously price contract can be vectorized using numpy to make it faster
+# so I will do that
+
+def price_contract_vectorized(r,sigma,T,guarantee, n, initial_price=100):
+    dt = T/n
+    R = np.exp(r*dt)
+    u = np.exp(sigma*np.sqrt(dt))
+    d = 1/u
+    p = (R-d)/(u-d)
+
+    # init asset prices at maturity
+    stock = initial_price * u ** np.arange(0,n+1,1) * d ** np.arange(n,-1,-1)
+
+    # init option prices at maturity
+    stock = np.maximum(guarantee-stock, np.zeros(n+1))
+
+    # calculate option prices at each node
+    for i in np.arange(n,0,-1):
+        stock = np.exp(-r*dt) * (p * stock[1:i+1] + (1-p) * stock[0:i])
+
+    return stock[0]
+
+
+# create a method to plot the price of the contract as a function of the number of steps
+def plot_price(r, sigma, T, guarantee, n, pricing=price_contract_vectorized, analytical=None):
+    steps = np.arange(1, n + 1)
+    price = np.zeros(len(steps))
+    for i in range(len(steps)):
+        price[i] = pricing(r, sigma, T, guarantee, steps[i], n)
+    plt.plot(steps, price)
+    if analytical is not None:
+        plt.plot(steps, analytical * np.ones(len(steps)))
+    plt.xlabel("Number of steps")
+    plt.ylabel("Price of contract")
+    plt.legend(["Binomial Tree", "Analytical"])
+    plt.title("r={}, sigma={}, T={}, guarantee={}".format(r, sigma, T, guarantee))
+    plt.show()
+
+
+def d1(S, t, T, r, sigma):
+    return ( np.log(S/100) + (r + 0.5 * sigma ** 2) * (T - t)) / (sigma * np.sqrt(T - t))
+
+
+# Function to price the option contract and calculate delta at each node
+def price_contract_with_delta(r, sigma, T, guarantee, n, initial_price=100):
+    dt = T / n
+    R = np.exp(r * dt)
+    u = np.exp(sigma * np.sqrt(dt))
+    d = 1 / u
+    p = (R - d) / (u - d)
+
+    # Create matrices to store stock prices and option deltas
+    stock = np.zeros((n + 1, n + 1))
+    delta = np.zeros((n + 1, n + 1))
+    stock[0, 0] = initial_price
+
+    # Populate the stock price tree
+    for i in range(1, n + 1):
+        stock[i, 0] = stock[i - 1, 0] * u
+        for j in range(1, i + 1):
+            stock[i, j] = stock[i - 1, j - 1] * d
+
+    # Create matrix to store option prices
+    option = np.zeros((n + 1, n + 1))
+    option[n, :] = np.maximum(guarantee - stock[n, :], 0)
+
+    # Calculate option prices and deltas at each node
+    for i in range(n - 1, -1, -1):
+        for j in range(i + 1):
+            option_up = option[i + 1, j]
+            option_down = option[i + 1, j + 1]
+            stock_up = stock[i + 1, j]
+            stock_down = stock[i, j] * d
+
+            # Calculate delta using the formula from above
+            delta[i, j] = stats.norm.cdf(
+                d1(stock[i, j], i, 10, r, 0.15))  # (option_up - option_down) / (stock_up - stock_down)
+
+            # Calculate option price
+            option[i, j] = np.exp(-r * dt) * (p * option_up + (1 - p) * option_down)
+
+    return stock, option, delta
+
