@@ -117,3 +117,22 @@ def price_contract_with_delta(r, sigma, T, guarantee, n, initial_price=100):
 
     return stock, option, delta
 
+
+
+
+# characteristic function of brownian motion WT
+def charfct(xi, Wt, Tt):
+    return np.exp(1j * xi * Wt - 0.5 * xi * xi * Tt)
+
+# fourier transform of tilted option payoff
+def optft(a, xi, S0, K, T, sig):
+    rsig2t = -0.5 * sig * sig * T
+    # compute Wbar
+    wbar = (np.log(K / S0) - rsig2t) / sig
+    return -S0 * np.exp(rsig2t + (1j * xi + sig - a) * wbar) / (1j * xi + sig - a) + K * np.exp(
+        (1j * xi - a) * wbar) / (1j * xi - a)
+
+# define auxillary function for integration
+def ftint2(xi, a):
+    return np.real(charfct(-xi - 1j * a, 0, T) * optft(a, xi, S0, K, T, sig) / (2 * np.pi))
+
