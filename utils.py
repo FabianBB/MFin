@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import scipy.stats as stats
+from scipy.stats import norm
 
 def price_contract(r,sigma,T,guarantee, n, initial_price=100):
     dt = T/n
@@ -135,4 +136,47 @@ def optft(a, xi, S0, K, T, sig):
 # define auxillary function for integration
 def ftint2(xi, a):
     return np.real(charfct(-xi - 1j * a, 0, T) * optft(a, xi, S0, K, T, sig) / (2 * np.pi))
+
+
+
+# create a method for the monte carlo pricing
+def MC_price(S0, r, sigma, T, K, M, n, type="call"):
+    dt = T/n # timesteps
+    # geometric brownian motion
+    St = np.exp(
+        (r - sigma ** 2 / 2) * dt
+        + sigma * np.random.normal(0, np.sqrt(dt), size=(M,n)).T
+    )
+
+    # include array of 1's
+    St = np.vstack([np.ones(M), St])
+
+    # multiply through by S0 and get cumprod of elements along sim path
+    St = S0 * St.cumprod(axis=0)
+
+    # payoff funciton
+    def payoff(S, K):
+        if type == "call":
+            return np.maximum(S[-1] - K, 0)
+        else:
+            return np.maximum(S[-1], K)
+
+    # discounting
+    def discounting(r, t):
+        return np.exp(-r*t)
+
+    # get the payoff of each path and take mean
+    payoff = payoff(St, K)
+    discounting = discounting(r, T)
+    price = np.mean(payoff * discounting)
+
+
+    return np.round(price, 3)
+
+
+def black_scholes_call_price(S0, K, r, sigma, T):
+    d1 = (np.log(S0 / K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
+    d2 = d1 - sigma * np.sqrt(T)
+    call_price = S0 * norm.cdf(d1) - K * np.exp(-r * T) * norm.cdf(d2)
+    return call_price
 
